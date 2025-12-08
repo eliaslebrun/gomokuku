@@ -1,0 +1,27 @@
+name: Push to Upstream Repository
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  push-to-upstream:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://${{ secrets.UPSTREAM_TOKEN }}@github.com/EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3.git
+
+      - name: Push changes to upstream default branch
+        run: git push upstream main:main
