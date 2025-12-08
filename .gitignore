@@ -1,0 +1,27 @@
+# Compiled object files and executable
+pbrain-gomoku-ai
+obj/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing and debug files
+test_game.txt
+debug_output.txt
+
+# Optional tournament file (uncomment when participating)
+# .brawl
