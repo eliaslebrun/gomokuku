@@ -25,6 +25,18 @@ Cell Board::getCell(int x, int y) const {
 }
 
 bool Board::placeStone(int x, int y, Cell stone) {
+    if (stone == Cell::EMPTY) {
+        // Allow placing empty (for undo)
+        if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+            if (grid[y][x] != Cell::EMPTY) {
+                moveCount--;
+            }
+            grid[y][x] = Cell::EMPTY;
+            return true;
+        }
+        return false;
+    }
+    
     if (!isValidMove(x, y)) {
         return false;
     }
@@ -33,11 +45,22 @@ bool Board::placeStone(int x, int y, Cell stone) {
     return true;
 }
 
+bool Board::removeStone(int x, int y) {
+    if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+        if (grid[y][x] != Cell::EMPTY) {
+            grid[y][x] = Cell::EMPTY;
+            moveCount--;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Board::checkWin(int x, int y, Cell stone) const {
     if (stone == Cell::EMPTY) {
         return false;
     }
-    
+
     // Check all 4 directions
     const int directions[4][2] = {
         {1, 0},
@@ -45,24 +68,24 @@ bool Board::checkWin(int x, int y, Cell stone) const {
         {1, 1},
         {1, -1}
     };
-    
+
     for (int i = 0; i < 4; i++) {
         int dx = directions[i][0];
         int dy = directions[i][1];
-        
+
         int count = countConsecutive(x, y, dx, dy, stone);
-        
+
         if (count >= 5) {
             return true;
         }
     }
-    
+
     return false;
 }
 
 int Board::countConsecutive(int x, int y, int dx, int dy, Cell stone) const {
     int count = 1;
-    
+
     // Count in positive direction
     int nx = x + dx;
     int ny = y + dy;
@@ -72,7 +95,7 @@ int Board::countConsecutive(int x, int y, int dx, int dy, Cell stone) const {
         nx += dx;
         ny += dy;
     }
-    
+
     // Count in negative direction
     nx = x - dx;
     ny = y - dy;
@@ -82,7 +105,7 @@ int Board::countConsecutive(int x, int y, int dx, int dy, Cell stone) const {
         nx -= dx;
         ny -= dy;
     }
-    
+
     return count;
 }
 
