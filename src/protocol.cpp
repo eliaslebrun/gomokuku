@@ -14,16 +14,16 @@ ProtocolHandler::ProtocolHandler() {
 void ProtocolHandler::runCommunicationLoop(Board& board, AI& ai) {
     globalBoard = &board;
     globalAI = &ai;
-    
+
     std::string line;
-    
+
     while (std::getline(std::cin, line)) {
         line = trimString(line);
-        
+
         if (line.empty()) {
             continue;
         }
-        
+
         // Parse command
         if (line.find("START") == 0) {
             auto parts = splitString(line, ' ');
@@ -60,7 +60,7 @@ void ProtocolHandler::runCommunicationLoop(Board& board, AI& ai) {
     }
 }
 
-void ProtocolHandler::handleStart(int boardSize) {
+void ProtocolHandler::handleStart(int) {
     if (globalBoard) {
         globalBoard->clear();
     }
@@ -72,11 +72,11 @@ void ProtocolHandler::handleBegin() {
     // Play in the center
     int centerX = 10;
     int centerY = 10;
-    
+
     if (globalBoard) {
         globalBoard->placeStone(centerX, centerY, myColor);
     }
-    
+
     sendMove(centerX, centerY);
 }
 
@@ -86,24 +86,24 @@ void ProtocolHandler::handleTurn(const std::string& command) {
     if (parts.size() < 2) {
         return;
     }
-    
+
     auto coords = splitString(parts[1], ',');
     if (coords.size() < 2) {
         return;
     }
-    
+
     int opponentX = std::stoi(coords[0]);
     int opponentY = std::stoi(coords[1]);
-    
+
     // Opponent color is opposite of ours
     Cell opponentColor = (myColor == Cell::BLACK) ? Cell::WHITE : Cell::BLACK;
-    
+
     if (globalBoard) {
         globalBoard->placeStone(opponentX, opponentY, opponentColor);
-        
+
         // Now we need to play
         Move bestMove = globalAI->findBestMove(*globalBoard, myColor);
-        
+
         // Check if move is valid
         if (globalBoard->isValidMove(bestMove.first, bestMove.second)) {
             globalBoard->placeStone(bestMove.first, bestMove.second, myColor);
@@ -120,45 +120,45 @@ void ProtocolHandler::handleTurn(const std::string& command) {
     }
 }
 
-void ProtocolHandler::handleBoard(const std::string& command) {
+void ProtocolHandler::handleBoard(const std::string&) {
     // Clear board first
     if (globalBoard) {
         globalBoard->clear();
     }
-    
+
     // Read board state line by line until "DONE"
     std::string line;
     while (std::getline(std::cin, line)) {
         line = trimString(line);
-        
+
         if (line == "DONE") {
             break;
         }
-        
+
         // Parse "x,y,player"
         auto parts = splitString(line, ',');
         if (parts.size() >= 3) {
             int x = std::stoi(parts[0]);
             int y = std::stoi(parts[1]);
             int player = std::stoi(parts[2]);
-            
+
             Cell stone = (player == 1) ? Cell::BLACK : Cell::WHITE;
-            
+
             if (globalBoard) {
                 globalBoard->placeStone(x, y, stone);
             }
         }
     }
-    
+
     // Determine our color based on move count
     if (globalBoard) {
         int moveCount = globalBoard->getMoveCount();
         // If odd number of moves, we are WHITE, otherwise BLACK
         myColor = (moveCount % 2 == 0) ? Cell::BLACK : Cell::WHITE;
-        
+
         // Now make our move
         Move bestMove = globalAI->findBestMove(*globalBoard, myColor);
-        
+
         if (globalBoard->isValidMove(bestMove.first, bestMove.second)) {
             globalBoard->placeStone(bestMove.first, bestMove.second, myColor);
             sendMove(bestMove.first, bestMove.second);
@@ -174,7 +174,7 @@ void ProtocolHandler::handleBoard(const std::string& command) {
     }
 }
 
-void ProtocolHandler::handleInfo(const std::string& command) {
+void ProtocolHandler::handleInfo(const std::string&) {
     // INFO commands are optional, we can ignore them
     // Or respond with appropriate values
 }
