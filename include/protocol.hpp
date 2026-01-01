@@ -1,8 +1,3 @@
-/*
-** Protocol Handler - Piskvork Protocol Implementation
-** Handles all communication with the game manager
-*/
-
 #ifndef PROTOCOL_HPP
 #define PROTOCOL_HPP
 

@@ -1,8 +1,3 @@
-/*
-** Board Implementation
-** Gomoku board state management and game logic
-*/
-
 #include "board.hpp"
 #include <iostream>
 
@@ -24,7 +19,7 @@ bool Board::isValidMove(int x, int y) const {
 
 Cell Board::getCell(int x, int y) const {
     if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
-        return grid[y][x]; // Note: array[y][x] for row-major order
+        return grid[y][x];
     }
     return Cell::EMPTY;
 }
@@ -39,40 +34,59 @@ bool Board::placeStone(int x, int y, Cell stone) {
 }
 
 bool Board::checkWin(int x, int y, Cell stone) const {
-    // TODO: Implement win detection (5 in a row)
-    // Check horizontal, vertical, and both diagonals
-    // Use countConsecutive helper
-    return false; // Placeholder
+    if (stone == Cell::EMPTY) {
+        return false;
+    }
+    
+    // Check all 4 directions
+    const int directions[4][2] = {
+        {1, 0},
+        {0, 1},
+        {1, 1},
+        {1, -1}
+    };
+    
+    for (int i = 0; i < 4; i++) {
+        int dx = directions[i][0];
+        int dy = directions[i][1];
+        
+        int count = countConsecutive(x, y, dx, dy, stone);
+        
+        if (count >= 5) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 int Board::countConsecutive(int x, int y, int dx, int dy, Cell stone) const {
-    // TODO: Count consecutive stones in a direction (dx,dy)
-    int count = 1; // Current stone
-
+    int count = 1;
+    
     // Count in positive direction
-    int nx = x + dx, ny = y + dy;
+    int nx = x + dx;
+    int ny = y + dy;
     while (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE &&
            getCell(nx, ny) == stone) {
         count++;
         nx += dx;
         ny += dy;
     }
-
+    
     // Count in negative direction
-    nx = x - dx, ny = y - dy;
+    nx = x - dx;
+    ny = y - dy;
     while (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE &&
            getCell(nx, ny) == stone) {
         count++;
         nx -= dx;
         ny -= dy;
     }
-
+    
     return count;
 }
 
 std::vector<Move> Board::getAvailableMoves() const {
-    // TODO: Return list of all empty positions
-    // Optimize by checking nearby occupied cells
     std::vector<Move> moves;
     for (int y = 0; y < BOARD_SIZE; ++y) {
         for (int x = 0; x < BOARD_SIZE; ++x) {
@@ -89,7 +103,6 @@ bool Board::isBoardFull() const {
 }
 
 void Board::printBoard() const {
-    // TODO: Debug function to print the board state
     std::cout << std::endl;
     for (int y = 0; y < BOARD_SIZE; ++y) {
         for (int x = 0; x < BOARD_SIZE; ++x) {

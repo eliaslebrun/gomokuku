@@ -1,8 +1,3 @@
-/*
-** Utility Functions - Helper functions for Gomoku AI
-** General utilities and debug helpers
-*/
-
 #ifndef UTILS_HPP
 #define UTILS_HPP
 

@@ -1,8 +1,3 @@
-/*
-** AI Engine - Artificial Intelligence for Gomoku
-** Decision making and move selection algorithm
-*/
-
 #ifndef AI_HPP
 #define AI_HPP
 

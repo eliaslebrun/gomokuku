@@ -1,61 +1,206 @@
-/*
-** Protocol Handler Implementation
-** Piskvork protocol command processing
-*/
-
 #include "protocol.hpp"
+#include "utils.hpp"
+#include <sstream>
+
+// Global state to track our color
+static Cell myColor = Cell::BLACK;
+static Board* globalBoard = nullptr;
+static AI* globalAI = nullptr;
 
 ProtocolHandler::ProtocolHandler() {
     // Constructor implementation
 }
 
 void ProtocolHandler::runCommunicationLoop(Board& board, AI& ai) {
-    // TODO: Implement main communication loop
-    // - Read from stdin
-    // - Parse commands
-    // - Call appropriate handlers
-    // - Send responses to stdout
+    globalBoard = &board;
+    globalAI = &ai;
+    
+    std::string line;
+    
+    while (std::getline(std::cin, line)) {
+        line = trimString(line);
+        
+        if (line.empty()) {
+            continue;
+        }
+        
+        // Parse command
+        if (line.find("START") == 0) {
+            auto parts = splitString(line, ' ');
+            if (parts.size() >= 2) {
+                int size = std::stoi(parts[1]);
+                handleStart(size);
+            } else {
+                handleStart(20); // Default size
+            }
+        }
+        else if (line == "BEGIN") {
+            myColor = Cell::BLACK;
+            handleBegin();
+        }
+        else if (line.find("TURN") == 0) {
+            handleTurn(line);
+        }
+        else if (line == "BOARD") {
+            handleBoard(line);
+        }
+        else if (line.find("INFO") == 0) {
+            handleInfo(line);
+        }
+        else if (line == "ABOUT") {
+            handleAbout();
+        }
+        else if (line == "END") {
+            handleEnd();
+            return; // Exit the loop
+        }
+        else if (line == "RESTART") {
+            handleRestart();
+        }
+    }
 }
 
 void ProtocolHandler::handleStart(int boardSize) {
-    // TODO: Initialize board with given size
+    if (globalBoard) {
+        globalBoard->clear();
+    }
+    sendMessage("OK");
 }
 
 void ProtocolHandler::handleBegin() {
-    // TODO: Make first move as black player
+    // We play first (BLACK)
+    // Play in the center
+    int centerX = 10;
+    int centerY = 10;
+    
+    if (globalBoard) {
+        globalBoard->placeStone(centerX, centerY, myColor);
+    }
+    
+    sendMove(centerX, centerY);
 }
 
 void ProtocolHandler::handleTurn(const std::string& command) {
-    // TODO: Parse opponent's move and respond with AI move
+    // Parse "TURN x,y"
+    auto parts = splitString(command, ' ');
+    if (parts.size() < 2) {
+        return;
+    }
+    
+    auto coords = splitString(parts[1], ',');
+    if (coords.size() < 2) {
+        return;
+    }
+    
+    int opponentX = std::stoi(coords[0]);
+    int opponentY = std::stoi(coords[1]);
+    
+    // Opponent color is opposite of ours
+    Cell opponentColor = (myColor == Cell::BLACK) ? Cell::WHITE : Cell::BLACK;
+    
+    if (globalBoard) {
+        globalBoard->placeStone(opponentX, opponentY, opponentColor);
+        
+        // Now we need to play
+        Move bestMove = globalAI->findBestMove(*globalBoard, myColor);
+        
+        // Check if move is valid
+        if (globalBoard->isValidMove(bestMove.first, bestMove.second)) {
+            globalBoard->placeStone(bestMove.first, bestMove.second, myColor);
+            sendMove(bestMove.first, bestMove.second);
+        } else {
+            // Fallback: find any valid move
+            auto availableMoves = globalBoard->getAvailableMoves();
+            if (!availableMoves.empty()) {
+                Move fallback = availableMoves[0];
+                globalBoard->placeStone(fallback.first, fallback.second, myColor);
+                sendMove(fallback.first, fallback.second);
+            }
+        }
+    }
 }
 
 void ProtocolHandler::handleBoard(const std::string& command) {
-    // TODO: Parse board state and respond with AI move
+    // Clear board first
+    if (globalBoard) {
+        globalBoard->clear();
+    }
+    
+    // Read board state line by line until "DONE"
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        line = trimString(line);
+        
+        if (line == "DONE") {
+            break;
+        }
+        
+        // Parse "x,y,player"
+        auto parts = splitString(line, ',');
+        if (parts.size() >= 3) {
+            int x = std::stoi(parts[0]);
+            int y = std::stoi(parts[1]);
+            int player = std::stoi(parts[2]);
+            
+            Cell stone = (player == 1) ? Cell::BLACK : Cell::WHITE;
+            
+            if (globalBoard) {
+                globalBoard->placeStone(x, y, stone);
+            }
+        }
+    }
+    
+    // Determine our color based on move count
+    if (globalBoard) {
+        int moveCount = globalBoard->getMoveCount();
+        // If odd number of moves, we are WHITE, otherwise BLACK
+        myColor = (moveCount % 2 == 0) ? Cell::BLACK : Cell::WHITE;
+        
+        // Now make our move
+        Move bestMove = globalAI->findBestMove(*globalBoard, myColor);
+        
+        if (globalBoard->isValidMove(bestMove.first, bestMove.second)) {
+            globalBoard->placeStone(bestMove.first, bestMove.second, myColor);
+            sendMove(bestMove.first, bestMove.second);
+        } else {
+            // Fallback
+            auto availableMoves = globalBoard->getAvailableMoves();
+            if (!availableMoves.empty()) {
+                Move fallback = availableMoves[0];
+                globalBoard->placeStone(fallback.first, fallback.second, myColor);
+                sendMove(fallback.first, fallback.second);
+            }
+        }
+    }
 }
 
 void ProtocolHandler::handleInfo(const std::string& command) {
-    // TODO: Handle INFO commands for configuration
+    // INFO commands are optional, we can ignore them
+    // Or respond with appropriate values
 }
 
 void ProtocolHandler::handleAbout() {
-    // TODO: Return bot information
-    sendMessage("name=\"Gomoku AI\", version=\"1.0\", author=\"Your Name\"");
+    sendMessage("name=\"GomokuAI\", version=\"1.0\", author=\"YourTeam\"");
 }
 
 void ProtocolHandler::handleEnd() {
-    // TODO: Clean up and exit
+    // Clean exit
+    std::exit(0);
 }
 
 void ProtocolHandler::handleRestart() {
-    // TODO: Reset the game state
+    if (globalBoard) {
+        globalBoard->clear();
+    }
+    sendMessage("OK");
 }
 
 void ProtocolHandler::sendMove(int x, int y) {
-    // TODO: Send move coordinates in protocol format
     std::cout << x << "," << y << std::endl;
+    std::cout.flush(); // CRITICAL: flush stdout
 }
 
 void ProtocolHandler::sendMessage(const std::string& message) {
-    // TODO: Send message response
     std::cout << message << std::endl;
+    std::cout.flush(); // CRITICAL: flush stdout
 }

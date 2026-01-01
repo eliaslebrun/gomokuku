@@ -1,8 +1,3 @@
-/*
-** Gomoku AI - pbrain-gomoku-ai
-** Main entry point for the Piskvork protocol compliant bot
-*/
-
 #include <iostream>
 #include <string>
 #include "protocol.hpp"

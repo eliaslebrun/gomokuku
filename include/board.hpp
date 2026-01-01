@@ -1,8 +1,3 @@
-/*
-** Board Management - Gomoku Game State
-** Handles the 20x20 game board and game rules
-*/
-
 #ifndef BOARD_HPP
 #define BOARD_HPP
 

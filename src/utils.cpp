@@ -1,8 +1,3 @@
-/*
-** Utility Functions Implementation
-** Helper functions for string processing, debug logging, etc.
-*/
-
 #include "utils.hpp"
 #include <iostream>
 #include <algorithm>
@@ -22,7 +17,6 @@ std::vector<std::string> splitString(const std::string& str, char delimiter) {
 }
 
 std::string trimString(const std::string& str) {
-    // TODO: Remove leading/trailing whitespace
     size_t start = str.find_first_not_of(" \t\n\r\f\v");
     if (start == std::string::npos) {
         return "";
@@ -35,7 +29,6 @@ std::string trimString(const std::string& str) {
 static bool debugEnabled = false;
 
 void logMessage(const std::string& message) {
-    // TODO: Only log when debug is enabled
     if (debugEnabled) {
         std::cerr << "[DEBUG] " << message << std::endl;
     }
@@ -62,31 +55,14 @@ int getRandomInt(int min, int max) {
 
 // Pattern matching helpers
 bool patternMatch(const std::string& text, const std::string& pattern) {
-    // TODO: Simple pattern matching (could use regex)
     return text.find(pattern) != std::string::npos;
 }
 
 // Validation helpers
 bool isValidCoordinate(int x, int y) {
-    // TODO: Check coordinate bounds (0-19 for 20x20 board)
     return x >= 0 && x < 20 && y >= 0 && y < 20;
 }
 
 bool isValidBoardSize(int size) {
-    // TODO: Gomoku uses 20x20 board
     return size == 20;
-}
-
-// Platform-specific helpers
-std::string getOSName() {
-    // TODO: Return OS name for logging
-    #ifdef _WIN32
-        return "Windows";
-    #elif __linux__
-        return "Linux";
-    #elif __APPLE__
-        return "macOS";
-    #else
-        return "Unknown";
-    #endif
 }
