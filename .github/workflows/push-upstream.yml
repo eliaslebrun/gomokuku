@@ -1,4 +1,4 @@
-name: Push to Upstream Repository
+name: Push to Upstream and Create PR
 
 on:
   push:
@@ -6,22 +6,78 @@ on:
       - main
 
 jobs:
-  push-to-upstream:
+  push-and-pr:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read   # we only need read in this repo for checkout; PAT will handle upstream writes
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
+          # prevent actions/checkout from persisting the default GITHUB_TOKEN credentials,
+          # so we can add a PAT-backed remote safely
+          persist-credentials: false
 
-      - name: Configure Git
+      - name: Configure git author
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Add upstream remote
-        run: git remote add upstream https://${{ secrets.UPSTREAM_TOKEN }}@github.com/EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3.git
+      - name: Create a unique branch to push to upstream
+        id: make_branch
+        run: |
+          UPSTREAM_BRANCH="sync-from-${GITHUB_ACTOR}-${GITHUB_RUN_ID}"
+          git switch -c "$UPSTREAM_BRANCH"
+          echo "UPSTREAM_BRANCH=$UPSTREAM_BRANCH" >> $GITHUB_ENV
+          echo "created branch $UPSTREAM_BRANCH"
 
-      - name: Push changes to upstream default branch
-        run: git push upstream main:main
+      - name: Add upstream remote using PAT
+        run: |
+          # Use x-access-token so the token isn't revealed in logs as plain text
+          git remote add upstream https://x-access-token:${{ secrets.UPSTREAM_TOKEN }}@github.com/EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3.git
+          git remote -v
+
+      - name: Push branch to upstream
+        env:
+          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
+        run: |
+          # Push current HEAD to upstream as the new branch
+          git push upstream "HEAD:refs/heads/${UPSTREAM_BRANCH}"
+
+      - name: Check for existing open PR on upstream (same head/base)
+        env:
+          UP_OWNER: EpitechPGE3-2025
+          UP_REPO: G-AIA-500-PAR-5-1-gomoku-3
+          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
+        run: |
+          # Query open PRs filtered by head (owner:branch) and base=main
+          EXISTING_COUNT=$(curl -s -H "Authorization: token ${{ secrets.UPSTREAM_TOKEN }}" \
+            "https://api.github.com/repos/${UP_OWNER}/${UP_REPO}/pulls?head=${UP_OWNER}:${UPSTREAM_BRANCH}&base=main&state=open" \
+            | jq '. | length')
+
+          echo "existing open PRs for ${UP_OWNER}:${UPSTREAM_BRANCH} -> ${EXISTING_COUNT}"
+          if [ "${EXISTING_COUNT}" -gt 0 ]; then
+            echo "A pull request already exists for branch ${UPSTREAM_BRANCH}, skipping PR creation."
+            exit 0
+          fi
+
+      - name: Create pull request on upstream
+        env:
+          UP_OWNER: EpitechPGE3-2025
+          UP_REPO: G-AIA-500-PAR-5-1-gomoku-3
+          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
+        run: |
+          PR_TITLE="Sync from eliaslebrun/gomokuku — ${UPSTREAM_BRANCH}"
+          PR_BODY="Automated sync from eliaslebrun/gomokuku via workflow run $GITHUB_RUN_ID.\n\nThis PR pushes changes from the fork repo into upstream for review."
+          # Create PR via REST API
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.UPSTREAM_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${UP_OWNER}/${UP_REPO}/pulls" \
+            -d "$( jq -n --arg t "$PR_TITLE" --arg h "$UPSTREAM_BRANCH" --arg b "main" --arg bd "$PR_BODY" '{title: $t, head: $h, base: $b, body: $bd}' )" )
+
+          # Print resulting PR URL (if created) and basic response for debugging
+          echo "$RESPONSE" | jq '{url: .html_url, number: .number, state: .state, title: .title}' || echo "$RESPONSE"
