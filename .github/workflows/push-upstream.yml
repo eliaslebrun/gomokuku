@@ -15,6 +15,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify token can access org repo
+        env:
+          ORG_REPO: EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3
+          TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
+        run: |
+          echo "Testing token access to ${ORG_REPO}..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${ORG_REPO}")
+          echo "API returned HTTP ${HTTP_CODE}"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "ERROR: Cannot access repository. HTTP ${HTTP_CODE}"
+            echo "Possible issues:"
+            echo "1. Token not authorized for SAML SSO"
+            echo "2. Token missing 'repo' scope"
+            echo "3. Not a member/collaborator of the org repo"
+            exit 1
+          fi
+          echo "✓ Token has access to repository"
+
       - name: Push to repo B
         env:
           ORG_REPO: EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3
