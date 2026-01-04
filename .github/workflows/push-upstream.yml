@@ -34,10 +34,48 @@ jobs:
           echo "UPSTREAM_BRANCH=$UPSTREAM_BRANCH" >> $GITHUB_ENV
           echo "created branch $UPSTREAM_BRANCH"
 
+      - name: Verify UPSTREAM_TOKEN can access upstream repo and detect SAML SSO
+        env:
+          UPSTREAM_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
+          UP_OWNER: EpitechPGE3-2025
+          UP_REPO: G-AIA-500-PAR-5-1-gomoku-3
+        run: |
+          set -euo pipefail
+
+          if [ -z "${UPSTREAM_TOKEN:-}" ]; then
+            echo "ERROR: UPSTREAM_TOKEN secret is not set. Aborting."
+            exit 1
+          fi
+
+          API_URL="https://api.github.com/repos/${UP_OWNER}/${UP_REPO}"
+          RESP_FILE=$(mktemp)
+
+          # Use curl to test token access to the upstream repo and capture HTTP status
+          HTTP_STATUS=$(curl -s -H "Authorization: token ${UPSTREAM_TOKEN}" -w "%{http_code}" -o "$RESP_FILE" "$API_URL") || true
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "UPSTREAM_TOKEN can access ${UP_OWNER}/${UP_REPO} (HTTP 200)."
+            rm -f "$RESP_FILE"
+          else
+            MSG=$(jq -r '.message // empty' "$RESP_FILE" 2>/dev/null || cat "$RESP_FILE" || true)
+            echo "ERROR: token cannot access upstream repo (HTTP $HTTP_STATUS). Message: $MSG"
+
+            if echo "$MSG" | grep -qi 'saml'; then
+              echo ""
+              echo "It looks like the organization enforces SAML SSO."
+              echo "Authorize the token for SAML SSO by visiting the SSO URL printed in the Actions job log or by visiting:"
+              echo "  https://github.com/orgs/${UP_OWNER}/sso"
+              echo "After authorizing SAML for the token, re-run the workflow."
+            fi
+
+            rm -f "$RESP_FILE"
+            exit 1
+          fi
+
       - name: Add upstream remote using PAT
         run: |
           # Use x-access-token so the token isn't revealed in logs as plain text
-          git remote add upstream https://x-access-token:${{ secrets.UPSTREAM_TOKEN }}@github.com/EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3.git
+          git remote add upstream "https://x-access-token:${{ secrets.UPSTREAM_TOKEN }}@github.com/EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3.git"
           git remote -v
 
       - name: Push branch to upstream
