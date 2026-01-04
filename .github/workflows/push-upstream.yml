@@ -21,28 +21,32 @@ jobs:
           TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
         run: |
           echo "Testing token access to ${ORG_REPO}..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: token ${TOKEN}" \
+          RESPONSE=$(curl -s -H "Authorization: token ${TOKEN}" \
             "https://api.github.com/repos/${ORG_REPO}")
-          echo "API returned HTTP ${HTTP_CODE}"
           
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "ERROR: Cannot access repository. HTTP ${HTTP_CODE}"
-            echo "Possible issues:"
-            echo "1. Token not authorized for SAML SSO"
-            echo "2. Token missing 'repo' scope"
-            echo "3. Not a member/collaborator of the org repo"
+          HTTP_CODE=$(echo "$RESPONSE" | jq -r '.message // "200"')
+          PERMISSIONS=$(echo "$RESPONSE" | jq -r '.permissions // {}')
+          
+          echo "Repository permissions:"
+          echo "$PERMISSIONS" | jq '.'
+          
+          CAN_PUSH=$(echo "$PERMISSIONS" | jq -r '.push // false')
+          
+          if [ "$CAN_PUSH" != "true" ]; then
+            echo "ERROR: Token does not have push permission to this repository"
+            echo "You need to be a collaborator with write access"
             exit 1
           fi
-          echo "✓ Token has access to repository"
+          echo "✓ Token has push access to repository"
 
       - name: Push to repo B
         env:
           ORG_REPO: EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3
           TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
+          GITHUB_USER: ${{ github.actor }}
         run: |
           git config --global credential.helper store
-          echo "https://${TOKEN}:x-oauth-basic@github.com" > ~/.git-credentials
+          echo "https://${GITHUB_USER}:${TOKEN}@github.com" > ~/.git-credentials
           git remote add org https://github.com/${ORG_REPO}.git
           git push org main:docs/add-project-documentation --force
           rm ~/.git-credentials
