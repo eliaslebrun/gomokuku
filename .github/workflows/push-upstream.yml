@@ -1,4 +1,4 @@
-name: Push to Upstream and Create PR
+name: Sync to Org Repo
 
 on:
   push:
@@ -6,119 +6,19 @@ on:
       - main
 
 jobs:
-  push-and-pr:
+  sync:
     runs-on: ubuntu-latest
-    # We need write permission so we can push the branch to the fork using GITHUB_TOKEN
-    permissions:
-      contents: write
-
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout repo A
         uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
-          # prevent actions/checkout from persisting the default GITHUB_TOKEN credentials,
-          # so we can add a PAT-backed remote safely
-          persist-credentials: false
 
-      - name: Configure git author
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Create a unique branch to push to fork
-        id: make_branch
-        run: |
-          UPSTREAM_BRANCH="sync-from-${GITHUB_ACTOR}-${GITHUB_RUN_ID}"
-          git switch -c "$UPSTREAM_BRANCH"
-          echo "UPSTREAM_BRANCH=$UPSTREAM_BRANCH" >> $GITHUB_ENV
-          echo "created branch $UPSTREAM_BRANCH"
-
-      - name: Verify UPSTREAM_TOKEN can access upstream repo and detect SAML SSO
+      - name: Push to repo B
         env:
-          UPSTREAM_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
-          UP_OWNER: EpitechPGE3-2025
-          UP_REPO: G-AIA-500-PAR-5-1-gomoku-3
+          ORG_REPO: EpitechPGE3-2025/G-AIA-500-PAR-5-1-gomoku-3
+          TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
         run: |
-          set -euo pipefail
-
-          if [ -z "${UPSTREAM_TOKEN:-}" ]; then
-            echo "ERROR: UPSTREAM_TOKEN secret is not set. Aborting."
-            exit 1
-          fi
-
-          API_URL="https://api.github.com/repos/${UP_OWNER}/${UP_REPO}"
-          RESP_FILE=$(mktemp)
-
-          # Use curl to test token access to the upstream repo and capture HTTP status
-          HTTP_STATUS=$(curl -s -H "Authorization: token ${UPSTREAM_TOKEN}" -w "%{http_code}" -o "$RESP_FILE" "$API_URL") || true
-
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "UPSTREAM_TOKEN can access ${UP_OWNER}/${UP_REPO} (HTTP 200)."
-            rm -f "$RESP_FILE"
-          else
-            MSG=$(jq -r '.message // empty' "$RESP_FILE" 2>/dev/null || cat "$RESP_FILE" || true)
-            echo "ERROR: token cannot access upstream repo (HTTP $HTTP_STATUS). Message: $MSG"
-
-            if echo "$MSG" | grep -qi 'saml'; then
-              echo ""
-              echo "It looks like the organization enforces SAML SSO."
-              echo "Authorize the token for SAML SSO by visiting the SSO URL printed in the Actions job log or by visiting:"
-              echo "  https://github.com/orgs/${UP_OWNER}/sso"
-              echo "After authorizing SAML for the token, re-run the workflow."
-            fi
-
-            rm -f "$RESP_FILE"
-            exit 1
-          fi
-
-      - name: Push branch to fork (origin) using GITHUB_TOKEN
-        env:
-          FORK_OWNER: ${{ github.actor }}
-          FORK_REPO: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
-        run: |
-          # Push current HEAD to the fork (so the PR can be created from fork-owner:branch)
-          git remote add origin-auth "https://x-access-token:${GITHUB_TOKEN}@github.com/${FORK_OWNER}/${FORK_REPO}.git"
-          git push origin-auth "HEAD:refs/heads/${UPSTREAM_BRANCH}"
-          git remote remove origin-auth || true
-
-      - name: Check for existing open PR on upstream (same head/base)
-        env:
-          UP_OWNER: EpitechPGE3-2025
-          UP_REPO: G-AIA-500-PAR-5-1-gomoku-3
-          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
-          FORK_OWNER: ${{ github.actor }}
-        run: |
-          # Query open PRs filtered by head (owner:branch) and base=main
-          EXISTING_COUNT=$(curl -s -H "Authorization: token ${{ secrets.UPSTREAM_TOKEN }}" \
-            "https://api.github.com/repos/${UP_OWNER}/${UP_REPO}/pulls?head=${FORK_OWNER}:${UPSTREAM_BRANCH}&base=main&state=open" \
-            | jq '. | length')
-
-          echo "existing open PRs for ${FORK_OWNER}:${UPSTREAM_BRANCH} -> ${EXISTING_COUNT}"
-          if [ "${EXISTING_COUNT}" -gt 0 ]; then
-            echo "A pull request already exists for branch ${UPSTREAM_BRANCH}, skipping PR creation."
-            exit 0
-          fi
-
-      - name: Create pull request on upstream
-        env:
-          UP_OWNER: EpitechPGE3-2025
-          UP_REPO: G-AIA-500-PAR-5-1-gomoku-3
-          UPSTREAM_BRANCH: ${{ env.UPSTREAM_BRANCH }}
-          FORK_OWNER: ${{ github.actor }}
-        run: |
-          PR_TITLE="Sync from ${FORK_OWNER}/gomokuku — ${UPSTREAM_BRANCH}"
-          PR_BODY="Automated sync from ${FORK_OWNER}/gomokuku via workflow run $GITHUB_RUN_ID.\n\nThis PR pushes changes from the fork repo into upstream for review."
-
-          # Create PR via REST API using head as fork-owner:branch
-          RESPONSE=$(curl -s -X POST \
-            -H "Authorization: token ${{ secrets.UPSTREAM_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${UP_OWNER}/${UP_REPO}/pulls" \
-            -d "$( jq -n --arg t "$PR_TITLE" --arg act "$FORK_OWNER" --arg h "$UPSTREAM_BRANCH" --arg b "main" --arg bd "$PR_BODY" '{title: $t, head: ($act + ":" + $h), base: $b, body: $bd}' )" )
-
-          # Print resulting PR URL (if created) and basic response for debugging
-          echo "$RESPONSE" | jq '{url: .html_url, number: .number, state: .state, title: .title}' || echo "$RESPONSE"
+          git remote add org https://x-access-token:${TOKEN}@github.com/${ORG_REPO}.git
+          git push org main:docs/add-project-documentation --force
