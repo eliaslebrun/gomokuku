@@ -6,6 +6,7 @@
 static Cell myColor = Cell::BLACK;
 static Board* globalBoard = nullptr;
 static AI* globalAI = nullptr;
+static bool gameStarted = false;
 
 ProtocolHandler::ProtocolHandler() {
     // Constructor implementation
@@ -28,23 +29,51 @@ void ProtocolHandler::runCommunicationLoop(Board& board, AI& ai) {
         if (line.find("START") == 0) {
             auto parts = splitString(line, ' ');
             if (parts.size() >= 2) {
-                int size = std::stoi(parts[1]);
-                handleStart(size);
+                try {
+                    int size = std::stoi(parts[1]);
+                    if (size != 20) {
+                        sendMessage("ERROR unsupported board size, only 20x20 supported");
+                        continue;
+                    }
+                    handleStart(size);
+                    gameStarted = true;
+                } catch (const std::exception&) {
+                    sendMessage("ERROR invalid board size");
+                    continue;
+                }
             } else {
-                handleStart(20); // Default size
+                sendMessage("ERROR missing board size parameter");
+                continue;
             }
         }
         else if (line == "BEGIN") {
+            if (!gameStarted) {
+                sendMessage("ERROR game not started");
+                continue;
+            }
             myColor = Cell::BLACK;
             handleBegin();
         }
         else if (line.find("TURN") == 0) {
+            if (!gameStarted) {
+                sendMessage("ERROR game not started");
+                continue;
+            }
             handleTurn(line);
         }
         else if (line == "BOARD") {
+            if (!gameStarted) {
+                sendMessage("ERROR game not started");
+                continue;
+            }
             handleBoard(line);
         }
         else if (line.find("INFO") == 0) {
+            auto parts = splitString(line, ' ');
+            if (parts.size() < 3) {
+                sendMessage("ERROR invalid info format, expected 'INFO key value'");
+                continue;
+            }
             handleInfo(line);
         }
         else if (line == "ABOUT") {
@@ -56,6 +85,11 @@ void ProtocolHandler::runCommunicationLoop(Board& board, AI& ai) {
         }
         else if (line == "RESTART") {
             handleRestart();
+        }
+        else {
+            // Handle unknown commands
+            std::string command = line.substr(0, line.find(' '));
+            sendMessage("UNKNOWN " + command);
         }
     }
 }
@@ -84,39 +118,59 @@ void ProtocolHandler::handleTurn(const std::string& command) {
     // Parse "TURN x,y"
     auto parts = splitString(command, ' ');
     if (parts.size() < 2) {
+        sendMessage("ERROR invalid turn format");
         return;
     }
 
     auto coords = splitString(parts[1], ',');
     if (coords.size() < 2) {
+        sendMessage("ERROR invalid coordinate format, expected x,y");
         return;
     }
 
-    int opponentX = std::stoi(coords[0]);
-    int opponentY = std::stoi(coords[1]);
+    try {
+        int opponentX = std::stoi(coords[0]);
+        int opponentY = std::stoi(coords[1]);
 
-    // Opponent color is opposite of ours
-    Cell opponentColor = (myColor == Cell::BLACK) ? Cell::WHITE : Cell::BLACK;
+        // Validate coordinates
+        if (opponentX < 0 || opponentX >= 20 || opponentY < 0 || opponentY >= 20) {
+            sendMessage("ERROR coordinates out of bounds");
+            return;
+        }
 
-    if (globalBoard) {
-        globalBoard->placeStone(opponentX, opponentY, opponentColor);
+        // Opponent color is opposite of ours
+        Cell opponentColor = (myColor == Cell::BLACK) ? Cell::WHITE : Cell::BLACK;
 
-        // Now we need to play
-        Move bestMove = globalAI->findBestMove(*globalBoard, myColor);
+        if (globalBoard) {
+            // Check if the position is already occupied
+            if (!globalBoard->isValidMove(opponentX, opponentY)) {
+                sendMessage("ERROR square occupied");
+                return;
+            }
 
-        // Check if move is valid
-        if (globalBoard->isValidMove(bestMove.first, bestMove.second)) {
-            globalBoard->placeStone(bestMove.first, bestMove.second, myColor);
-            sendMove(bestMove.first, bestMove.second);
-        } else {
-            // Fallback: find any valid move
-            auto availableMoves = globalBoard->getAvailableMoves();
-            if (!availableMoves.empty()) {
-                Move fallback = availableMoves[0];
-                globalBoard->placeStone(fallback.first, fallback.second, myColor);
-                sendMove(fallback.first, fallback.second);
+            globalBoard->placeStone(opponentX, opponentY, opponentColor);
+
+            // Now we need to play
+            Move bestMove = globalAI->findBestMove(*globalBoard, myColor);
+
+            // Check if move is valid
+            if (globalBoard->isValidMove(bestMove.first, bestMove.second)) {
+                globalBoard->placeStone(bestMove.first, bestMove.second, myColor);
+                sendMove(bestMove.first, bestMove.second);
+            } else {
+                // Fallback: find any valid move
+                auto availableMoves = globalBoard->getAvailableMoves();
+                if (!availableMoves.empty()) {
+                    Move fallback = availableMoves[0];
+                    globalBoard->placeStone(fallback.first, fallback.second, myColor);
+                    sendMove(fallback.first, fallback.second);
+                } else {
+                    sendMessage("ERROR no valid moves available");
+                }
             }
         }
+    } catch (const std::exception&) {
+        sendMessage("ERROR invalid coordinate values");
     }
 }
 
@@ -138,15 +192,40 @@ void ProtocolHandler::handleBoard(const std::string&) {
         // Parse "x,y,player"
         auto parts = splitString(line, ',');
         if (parts.size() >= 3) {
-            int x = std::stoi(parts[0]);
-            int y = std::stoi(parts[1]);
-            int player = std::stoi(parts[2]);
+            try {
+                int x = std::stoi(parts[0]);
+                int y = std::stoi(parts[1]);
+                int player = std::stoi(parts[2]);
 
-            Cell stone = (player == 1) ? Cell::BLACK : Cell::WHITE;
+                // Validate coordinates
+                if (x < 0 || x >= 20 || y < 0 || y >= 20) {
+                    sendMessage("ERROR board coordinates out of bounds");
+                    continue;
+                }
 
-            if (globalBoard) {
-                globalBoard->placeStone(x, y, stone);
+                // Validate player value (1 = black, 2 = white)
+                if (player != 1 && player != 2) {
+                    sendMessage("ERROR invalid player value, must be 1 or 2");
+                    continue;
+                }
+
+                Cell stone = (player == 1) ? Cell::BLACK : Cell::WHITE;
+
+                if (globalBoard) {
+                    // Check if position is already occupied
+                    if (!globalBoard->isValidMove(x, y)) {
+                        sendMessage("ERROR board position already occupied");
+                        continue;
+                    }
+                    globalBoard->placeStone(x, y, stone);
+                }
+            } catch (const std::exception&) {
+                sendMessage("ERROR invalid board data format");
+                continue;
             }
+        } else {
+            sendMessage("ERROR invalid board line format");
+            continue;
         }
     }
 
@@ -169,6 +248,8 @@ void ProtocolHandler::handleBoard(const std::string&) {
                 Move fallback = availableMoves[0];
                 globalBoard->placeStone(fallback.first, fallback.second, myColor);
                 sendMove(fallback.first, fallback.second);
+            } else {
+                sendMessage("ERROR no valid moves available");
             }
         }
     }
@@ -192,6 +273,8 @@ void ProtocolHandler::handleRestart() {
     if (globalBoard) {
         globalBoard->clear();
     }
+    gameStarted = false;
+    myColor = Cell::BLACK;
     sendMessage("OK");
 }
 
